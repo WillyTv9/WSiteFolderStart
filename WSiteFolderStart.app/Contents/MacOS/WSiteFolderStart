@@ -1,0 +1,15 @@
+#!/bin/bash
+# WSiteFolderStart - crea la struttura base di un sito sulla Scrivania
+
+BASE="$HOME/Desktop"
+
+while true; do
+  NAME=$(osascript -e 'text returned of (display dialog "App in esecuzione" & return & return & "Inserisci nome cartella principale" default answer "" buttons {"Scatena"} default button "Scatena" with title "WSiteFolderStart")') || exit 0
+  NAME=$(printf '%s' "$NAME" | tr -d '/:' | sed 's/^ *//;s/ *$//')
+  [ -n "$NAME" ] && break
+done
+
+ROOT="$BASE/$NAME"
+mkdir -p "$ROOT/Html" "$ROOT/Css" "$ROOT/Php" "$ROOT/Js" "$ROOT/Img"
+touch "$ROOT/Html/index.html" "$ROOT/Css/style.css" "$ROOT/Php/login.php" "$ROOT/Js/script.js"
+exit 0
