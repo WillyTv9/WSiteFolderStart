@@ -97,10 +97,19 @@ public class MainWindow : Window
     void ApplyBackdrop()
     {
         var h = new WindowInteropHelper(this).Handle;
-        int d = dark ? 1 : 0, mica = 3; // 3 = Acrylic/"Mica Alt" a seconda della build di Windows 11
-        DwmSetWindowAttribute(h, 20, ref d, sizeof(int));     // tema scuro/chiaro
-        DwmSetWindowAttribute(h, 38, ref mica, sizeof(int));  // backdrop traslucido
-        Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+        int useDark = dark ? 1 : 0;
+        DwmSetWindowAttribute(h, 20, ref useDark, sizeof(int));      // titolo scuro/chiaro
+
+        if (Environment.OSVersion.Version.Build >= 22621)            // Windows 11 22H2 o successivo
+        {
+            int acrylic = 3;                                         // 3 = Acrylic, 2 = Mica
+            DwmSetWindowAttribute(h, 38, ref acrylic, sizeof(int));
+            Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+        }
+        else                                                         // Windows 10 / 11 vecchio: sfondo pieno
+        {
+            Background = new SolidColorBrush(dark ? Color.FromRgb(36, 36, 42) : Color.FromRgb(240, 240, 245));
+        }
     }
 
     static string Clean(string t) =>

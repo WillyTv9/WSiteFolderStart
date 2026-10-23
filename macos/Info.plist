@@ -1,20 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>CFBundleName</key><string>WSiteFolderStart</string>
-	<key>CFBundleDisplayName</key><string>WSiteFolderStart</string>
-	<key>CFBundleIdentifier</key><string>local.wsitefolderstart</string>
-	<key>CFBundleVersion</key><string>2.0</string>
-	<key>CFBundleShortVersionString</key><string>2.0</string>
-	<key>CFBundleExecutable</key><string>WSiteFolderStart</string>
-	<key>CFBundlePackageType</key><string>APPL</string>
-	<key>CFBundleIconFile</key><string>AppIcon</string>
-	<key>CFBundleDevelopmentRegion</key><string>it</string>
-	<key>LSMinimumSystemVersion</key><string>11.0</string>
-	<key>NSHighResolutionCapable</key><true/>
-	<key>NSDesktopFolderUsageDescription</key><string>WSiteFolderStart crea la cartella del tuo sito sulla Scrivania.</string>
-	<key>NSDocumentsFolderUsageDescription</key><string>WSiteFolderStart crea la cartella del tuo sito in Documenti.</string>
-	<key>NSDownloadsFolderUsageDescription</key><string>WSiteFolderStart crea la cartella del tuo sito in Download.</string>
-</dict>
-</plist>
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>WSiteFolderStart</string>
+  <key>CFBundleDisplayName</key><string>WSiteFolderStart</string>
+  <key>CFBundleIdentifier</key><string>com.wsite.folderstart</string>
+  <key>CFBundleExecutable</key><string>WSiteFolderStart</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSDesktopFolderUsageDescription</key><string>Serve per creare la cartella del sito sul Desktop.</string>
+</dict></plist>
