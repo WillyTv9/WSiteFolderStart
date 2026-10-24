@@ -6,7 +6,7 @@ APP="WSiteFolderStart.app"
 rm -rf "$APP" AppIcon.iconset
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" AppIcon.iconset
 
-swiftc -O -parse-as-library -target "$(uname -m)-apple-macos15.0" main.swift \
+swiftc -O -parse-as-library -target "$(uname -m)-apple-macos15.0" *.swift \
   -o "$APP/Contents/MacOS/WSiteFolderStart"
 
 for s in 16 32 128 256 512; do

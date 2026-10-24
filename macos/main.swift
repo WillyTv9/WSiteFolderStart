@@ -4,28 +4,55 @@ import AppKit
 @main
 struct WSiteFolderStartApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @StateObject private var store = Store()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("WSiteFolderStart") {
             ContentView()
+                .environmentObject(store)
                 .containerBackground(.ultraThinMaterial, for: .window)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+
+        Window("Preset e IDE", id: "presets") {
+            PresetsWindow()
+                .environmentObject(store)
+                .containerBackground(.ultraThinMaterial, for: .window)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
     }
 }
 
-// X rossa = chiude l'app. "Esci" dal Dock e Cmd+Q funzionano di default.
+// X rossa sulla finestra principale = chiude l'app. "Esci" dal Dock e Cmd+Q funzionano di default.
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
+                                               object: nil, queue: .main) { note in
+            if let window = note.object as? NSWindow, window.title == "WSiteFolderStart" {
+                NSApp.terminate(nil)
+            }
+        }
+    }
 }
 
-// MARK: - Interfaccia
+// MARK: - Finestra principale
 
 struct ContentView: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.openWindow) private var openWindow
     @State private var folderName = ""
     @State private var errorText = ""
     @FocusState private var focused: Bool
+
+    private var idePath: String { store.selected.idePath ?? "" }
+
+    private var nameIsEmpty: Bool {
+        folderName.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     var body: some View {
         ZStack {
@@ -53,19 +80,21 @@ struct ContentView: View {
                         .textFieldStyle(.plain)
                         .multilineTextAlignment(.center)
                         .focused($focused)
-                        .onSubmit(scatena)
+                        .onSubmit { scatena() }
                 }
                 .padding(.vertical, 10).padding(.horizontal, 16)
                 .frame(width: 250)
                 .modifier(FakeGlass(shape: Capsule()))
 
+                presetRow
+
                 if !errorText.isEmpty {
                     Text(errorText).font(.caption).foregroundStyle(.red)
                 }
 
-                Button("Scatena", action: scatena)
+                Button("Scatena") { scatena() }
                     .buttonStyle(GlassButtonStyle())
-                    .disabled(folderName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(nameIsEmpty)
                     .padding(.top, 4)
             }
             .padding(32)
@@ -76,15 +105,64 @@ struct ContentView: View {
         .onAppear { focused = true }
     }
 
-    func scatena() {
-        let name = folderName
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
+    private var presetRow: some View {
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(store.presets) { p in
+                    Button { store.selectedID = p.id } label: {
+                        if p.id == store.selectedID {
+                            Label(p.name, systemImage: "checkmark")
+                        } else {
+                            Text(p.name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.stack.3d.up")
+                    Text(store.selected.name).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9))
+                }
+                .font(.system(size: 13))
+                .padding(.vertical, 8).padding(.horizontal, 14)
+                .modifier(FakeGlass(shape: Capsule()))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            Button { openWindow(id: "presets") } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 13))
+                    .padding(9)
+                    .modifier(FakeGlass(shape: Circle()))
+            }
+            .buttonStyle(.plain)
+            .help("Gestisci preset e IDE")
+        }
+    }
+
+    private func scatena() {
+        let name = Builder.safe(folderName)
+        guard !name.isEmpty, name != ".", name != ".." else { return }
         do {
-            try Builder.create(named: name)
-            NSApp.terminate(nil)
+            let root = try Builder.create(named: name, preset: store.selected)
+            if !idePath.isEmpty {
+                let config = NSWorkspace.OpenConfiguration()
+                NSWorkspace.shared.open([root],
+                                        withApplicationAt: URL(fileURLWithPath: idePath),
+                                        configuration: config) { _, error in
+                    DispatchQueue.main.async {
+                        if error == nil {
+                            NSApp.terminate(nil)
+                        } else {
+                            errorText = "Cartella creata, ma non riesco ad aprire l'IDE. Controlla la scelta nel preset."
+                        }
+                    }
+                }
+            } else {
+                NSApp.terminate(nil)
+            }
         } catch {
             errorText = "Errore: \(error.localizedDescription)"
         }
@@ -93,8 +171,7 @@ struct ContentView: View {
 
 // MARK: - Effetto "liquid glass" simulato (funziona anche su Sequoia)
 
-/// Macchie di colore sfocate che si muovono lentamente dietro al vetro:
-/// danno l'effetto di rifrazione/liquido.
+/// Macchie di colore sfocate che si muovono lentamente dietro al vetro.
 struct LiquidBackdrop: View {
     @State private var move = false
     var body: some View {
@@ -156,57 +233,21 @@ struct FakeGlass<S: InsettableShape>: ViewModifier {
 }
 
 struct GlassButtonStyle: ButtonStyle {
+    let tint: Color?
     @Environment(\.isEnabled) private var enabled
+
+    init(tint: Color? = .blue) {
+        self.tint = tint
+    }
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(tint == nil ? Color.primary : Color.white)
             .padding(.horizontal, 34).padding(.vertical, 11)
-            .modifier(FakeGlass(shape: Capsule(), tint: .blue))
+            .modifier(FakeGlass(shape: Capsule(), tint: tint))
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
             .opacity(enabled ? 1 : 0.7)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
-    }
-}
-
-// MARK: - Creazione cartelle (sul Desktop)
-
-enum Builder {
-    static func create(named name: String) throws {
-        let fm = FileManager.default
-        let desktop = fm.urls(for: .desktopDirectory, in: .userDomainMask)[0]
-        let root = desktop.appendingPathComponent(name, isDirectory: true)
-
-        let files: [(String, String, String)] = [
-            ("Html", "index.html", """
-            <!DOCTYPE html>
-            <html lang="it">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>\(name)</title>
-              <link rel="stylesheet" href="../Css/style.css">
-            </head>
-            <body>
-              <h1>\(name)</h1>
-              <script src="../Js/script.js"></script>
-            </body>
-            </html>
-            """),
-            ("Css", "style.css", "/* Stili di \(name) */\n"),
-            ("Php", "login.php", "<?php\n// Login di \(name)\n"),
-            ("Js", "script.js", "// Script di \(name)\n"),
-        ]
-
-        for (folder, file, content) in files {
-            let dir = root.appendingPathComponent(folder, isDirectory: true)
-            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            let path = dir.appendingPathComponent(file)
-            if !fm.fileExists(atPath: path.path) {
-                try content.write(to: path, atomically: true, encoding: .utf8)
-            }
-        }
-        try fm.createDirectory(at: root.appendingPathComponent("Img", isDirectory: true),
-                               withIntermediateDirectories: true)
     }
 }
