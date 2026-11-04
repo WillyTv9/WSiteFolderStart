@@ -59,7 +59,7 @@ MioSito/
 | Sistema | File | Stato |
 |---|---|---|
 | macOS 15 (Sequoia) o successivo | [`WSiteFolderStart-macOS.zip`](https://github.com/WillyTv9/WSiteFolderStart/releases/latest/download/WSiteFolderStart-macOS.zip) | Versione completa, con preset e IDE |
-| Windows 10 / 11 (64 bit) | [`WSiteFolderStart.exe`](https://github.com/WillyTv9/WSiteFolderStart/releases/latest/download/WSiteFolderStart.exe) | **Beta**: struttura fissa, senza preset né IDE |
+| Windows 10 / 11 (64 bit) | [`WSiteFolderStart.exe`](https://github.com/WillyTv9/WSiteFolderStart/releases/latest/download/WSiteFolderStart.exe) | **Beta**: stesse funzioni di macOS (preset personalizzabili e apertura nell'IDE), appena portate su Windows |
 
 Tutte le versioni sono nella pagina [**Releases**](https://github.com/WillyTv9/WSiteFolderStart/releases).
 
@@ -92,7 +92,9 @@ Se compili l'app tu stesso dai sorgenti (vedi sotto) questi avvisi non compaiono
 1. Scarica `WSiteFolderStart.exe` e mettilo dove vuoi: non richiede installazione né .NET.
 2. Al primo avvio può comparire la schermata blu **«Windows ha protetto il PC»**. Premi **Ulteriori informazioni** e poi **Esegui comunque**.
 
-## Preset e IDE (solo macOS)
+## Preset e IDE
+
+Disponibili su macOS e su Windows. Gli screenshot qui sotto sono della versione macOS; su Windows la finestra ha gli stessi contenuti.
 
 <p align="center">
   <img src="assets/screenshot-presets.png" width="760" alt="Finestra Preset e IDE">
@@ -113,7 +115,9 @@ Nei nomi e nel contenuto dei file puoi usare questi segnaposto:
 | `{{data}}` | la data di oggi (gg/mm/aaaa) |
 | `{{anno}}` | l'anno corrente |
 
-Una cartella senza elementi viene creata vuota, un file senza contenuto viene creato vuoto. Il preset predefinito si chiama **Sito Web** e riproduce la struttura mostrata sopra. I preset sono salvati in `~/Library/Application Support/WSiteFolderStart/presets.json`; se li cancelli tutti, l'app ricrea quello predefinito.
+Una cartella senza elementi viene creata vuota, un file senza contenuto viene creato vuoto. Il preset predefinito si chiama **Sito Web** e riproduce la struttura mostrata sopra. I preset sono salvati in `~/Library/Application Support/WSiteFolderStart/presets.json` (macOS) o `%AppData%\WSiteFolderStart\presets.json` (Windows); se li cancelli tutti, l'app ricrea quello predefinito.
+
+**Destinazione su Windows.** Il percorso può contenere `~` (la cartella utente), `%DESKTOP%` e `%DOCUMENTS%`. Il valore predefinito è `%DESKTOP%`, cioè il tuo Desktop reale, anche se è sincronizzato con OneDrive.
 
 ### Aprire il progetto nell'IDE
 
@@ -121,7 +125,7 @@ Una cartella senza elementi viene creata vuota, un file senza contenuto viene cr
   <img src="assets/screenshot-ide-menu.png" width="300" alt="Menu di scelta dell'IDE">
 </p>
 
-Ogni preset ha il **proprio IDE**. L'app riconosce da sola quelli installati tra Visual Studio Code, Cursor, Windsurf, Zed, Sublime Text, WebStorm, PhpStorm, Nova e BBEdit; con *Altra app…* puoi scegliere qualsiasi altra applicazione.
+Ogni preset ha il **proprio IDE**. L'app riconosce da sola quelli installati tra Visual Studio Code, Cursor, Windsurf, Zed, Sublime Text, WebStorm, PhpStorm, Nova e BBEdit su macOS (su Windows: Visual Studio Code, Cursor, Windsurf, Zed, Sublime Text, Notepad++, WebStorm e PhpStorm); con *Altra app…* puoi scegliere qualsiasi altra applicazione.
 
 Se il preset ha un IDE, premendo **Scatena** l'app crea la struttura, apre la **cartella principale** nell'IDE (così un `index.html` non finisce nel browser) e poi si chiude. Se il preset è su *Nessuno*, crea e basta. Se l'IDE non si riesce ad aprire, l'app resta aperta con un avviso: la cartella è comunque già stata creata.
 
@@ -145,7 +149,7 @@ Se il preset ha un IDE, premendo **Scatena** l'app crea la struttura, apre la **
 ## Aspetto
 
 - **macOS**: effetto "liquid glass" simulato, che funziona anche su Sequoia. Materiale sfocato traslucido, riflessi diagonali, bordo luminoso, ombre morbide e macchie di colore che si muovono lentamente dietro al vetro. Non usa le API esclusive di macOS 26.
-- **Windows**: sfondo traslucido Acrylic su Windows 11 22H2 o successivo; sulle versioni precedenti viene usato uno sfondo pieno con gli stessi colori.
+- **Windows**: scheda di vetro con bordo luminoso, macchie di colore animate dietro e sfondo traslucido Acrylic su Windows 11 22H2 o successivo; sulle versioni precedenti viene usato uno sfondo pieno con gli stessi colori.
 
 ## Compilare dai sorgenti
 
@@ -191,7 +195,10 @@ Il risultato è un unico file, `windows\bin\Release\net8.0-windows\win-x64\publi
 │   ├── build.sh         compila e assembla WSiteFolderStart.app
 │   └── icon.png         icona sorgente
 ├── windows/
-│   ├── Program.cs       app WPF
+│   ├── Program.cs       finestra principale
+│   ├── EditorWindow.cs  finestra Preset e IDE
+│   ├── Models.cs        preset, salvataggio, elenco IDE e creazione cartelle
+│   ├── Theme.cs         colori, sfondo traslucido e controlli di vetro
 │   ├── WSiteFolderStart.csproj
 │   ├── icon.ico
 │   └── icon.png
@@ -216,7 +223,7 @@ Su GitHub compaiono nelle Releases `WSiteFolderStart-macOS.zip` e `WSiteFolderSt
 ## Personalizzare
 
 - **macOS**: destinazione, struttura e contenuto dei file si cambiano dai preset, senza toccare il codice.
-- **Windows**: la destinazione (`SpecialFolder.Desktop`) e il contenuto dei file (funzione `Scatena`) sono in `windows/Program.cs`.
+- **Windows**: come su macOS, destinazione, struttura e contenuto dei file si cambiano dai preset.
 - **Icona**: sostituisci `icon.png` (meglio almeno 1024×1024 px) e, per Windows, rigenera `icon.ico`.
 
 Segnalazioni e idee sono benvenute nelle [Issues](https://github.com/WillyTv9/WSiteFolderStart/issues).

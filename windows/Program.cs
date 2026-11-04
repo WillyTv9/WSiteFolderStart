@@ -1,147 +1,244 @@
-using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Shell;
-using Microsoft.Win32;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 
 namespace WSiteFolderStart;
 
 public class App : Application
 {
     [STAThread]
-    public static void Main() => new App().Run(new MainWindow());
+    public static void Main()
+    {
+        var app = new App();
+        var store = Store.Load();
+        app.Run(new MainWindow(store));
+    }
 }
 
 public class MainWindow : Window
 {
-    [DllImport("dwmapi.dll")]
-    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    readonly Store store;
+    readonly TextBox input = Ui.Input(19, 38);
+    readonly TextBlock placeholder = Ui.Text("es. MioSito", 14, Theme.Placeholder);
+    readonly TextBlock presetLabel = Ui.Text("", 13);
+    readonly TextBlock pathText = Ui.Text("", 11, Theme.Sub);
+    readonly TextBlock error = Ui.Text("", 12, Brushes.IndianRed);
+    readonly Button presetBtn;
+    readonly Button goBtn;
+    EditorWindow? editor;
 
-    readonly TextBox input = new();
-    readonly TextBlock error = new();
-    readonly TextBlock pathText = new();
-    readonly TextBlock placeholder = new();
-    readonly bool dark = !IsLightTheme();
-
-    public MainWindow()
+    public MainWindow(Store store)
     {
+        this.store = store;
+
         Title = "WSiteFolderStart";
-        Width = 380; Height = 500;
+        Width = 400;
+        SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Background = Brushes.Transparent;
+        FontFamily = Ui.Font;
         Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/icon.png"));
-        WindowChrome.SetWindowChrome(this, new WindowChrome {
-            CaptionHeight = 32, GlassFrameThickness = new Thickness(-1),
-            ResizeBorderThickness = new Thickness(0), UseAeroCaptionButtons = true });
+        Theme.ApplyChrome(this, false);
 
-        var fg = dark ? Brushes.White : new SolidColorBrush(Color.FromRgb(30, 30, 30));
-        var sub = new SolidColorBrush(dark ? Color.FromArgb(170, 255, 255, 255) : Color.FromArgb(150, 0, 0, 0));
-        var glass = new SolidColorBrush(dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(110, 255, 255, 255));
-        var stroke = new SolidColorBrush(dark ? Color.FromArgb(70, 255, 255, 255) : Color.FromArgb(140, 255, 255, 255));
-
-        var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center,
-                                     HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 24, 0, 0) };
-        stack.Children.Add(new System.Windows.Controls.Image {
+        // ── Titolo e icona
+        var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        stack.Children.Add(new System.Windows.Controls.Image
+        {
             Source = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/icon.png")),
-            Width = 64, Height = 64, Margin = new Thickness(0, 0, 0, 14) });
-        stack.Children.Add(new TextBlock { Text = "App in esecuzione", FontSize = 22, FontWeight = FontWeights.SemiBold,
-            Foreground = fg, HorizontalAlignment = HorizontalAlignment.Center });
-        stack.Children.Add(new TextBlock { Text = "Inserisci nome cartella principale", FontSize = 13, Foreground = sub,
-            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 14) });
+            Width = 68, Height = 68, Margin = new Thickness(0, 0, 0, 14),
+            Effect = new DropShadowEffect { BlurRadius = 10, ShadowDepth = 4, Direction = 270, Opacity = 0.25, Color = Colors.Black }
+        });
 
-        input.Width = 260; input.Height = 38; input.FontSize = 14; input.Foreground = fg;
-        input.CaretBrush = fg; input.HorizontalContentAlignment = HorizontalAlignment.Center;
-        input.VerticalContentAlignment = VerticalAlignment.Center;
-        input.Background = glass; input.BorderBrush = stroke;
-        input.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Scatena(); };
-        placeholder.Text = "es. MioSito"; placeholder.FontSize = 14;
-        placeholder.Foreground = new SolidColorBrush(dark ? Color.FromArgb(200, 255, 255, 255) : Color.FromArgb(160, 0, 0, 0));
+        var title = Ui.Text("App in esecuzione", 22, Theme.Fg, true);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        stack.Children.Add(title);
+
+        var subtitle = Ui.Text("Inserisci nome cartella principale", 13, Theme.Sub);
+        subtitle.HorizontalAlignment = HorizontalAlignment.Center;
+        subtitle.Margin = new Thickness(0, 8, 0, 14);
+        stack.Children.Add(subtitle);
+
+        // ── Campo del nome, con placeholder leggibile
+        input.TextAlignment = TextAlignment.Center;
         placeholder.IsHitTestVisible = false;
         placeholder.HorizontalAlignment = HorizontalAlignment.Center;
         placeholder.VerticalAlignment = VerticalAlignment.Center;
-        var host = new Grid { Width = 260 };
+        var host = new Grid { Width = 250 };
         host.Children.Add(input);
         host.Children.Add(placeholder);
         stack.Children.Add(host);
 
-        pathText.FontSize = 11; pathText.Foreground = sub; pathText.TextWrapping = TextWrapping.Wrap;
-        pathText.MaxWidth = 300; pathText.TextAlignment = TextAlignment.Center;
-        pathText.HorizontalAlignment = HorizontalAlignment.Center; pathText.Margin = new Thickness(0, 10, 0, 0);
-        stack.Children.Add(pathText);
-        input.TextChanged += (_, _) => UpdatePath();
-        UpdatePath();
+        // ── Preset + gestione preset
+        var presetContent = new StackPanel { Orientation = Orientation.Horizontal };
+        presetContent.Children.Add(Ui.Glyph("\uE81E", 13));
+        presetLabel.Margin = new Thickness(8, 0, 6, 0);
+        presetLabel.TextTrimming = TextTrimming.CharacterEllipsis;
+        presetLabel.MaxWidth = 130;
+        presetLabel.TextWrapping = TextWrapping.NoWrap;
+        presetContent.Children.Add(presetLabel);
+        presetContent.Children.Add(Ui.Text("▾", 11, Theme.Sub));
 
-        error.Foreground = Brushes.IndianRed; error.FontSize = 12;
-        error.HorizontalAlignment = HorizontalAlignment.Center; error.Margin = new Thickness(0, 8, 0, 0);
+        presetBtn = Ui.Glass(presetContent, 18, new Thickness(14, 7, 14, 7));
+        presetBtn.Click += (_, _) => ShowPresetMenu();
+
+        var manageBtn = Ui.Glass(Ui.Glyph("\uE713", 14), 18, new Thickness(0));
+        manageBtn.Width = 36;
+        manageBtn.Height = 36;
+        manageBtn.ToolTip = "Gestisci preset e IDE";
+        manageBtn.Click += (_, _) => OpenEditor();
+
+        var presetRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 14, 0, 0)
+        };
+        presetRow.Children.Add(presetBtn);
+        manageBtn.Margin = new Thickness(8, 0, 0, 0);
+        presetRow.Children.Add(manageBtn);
+        stack.Children.Add(presetRow);
+
+        // ── Percorso (solo su Windows) ed errori
+        pathText.TextAlignment = TextAlignment.Center;
+        pathText.MaxWidth = 280;
+        pathText.HorizontalAlignment = HorizontalAlignment.Center;
+        pathText.Margin = new Thickness(0, 12, 0, 0);
+        stack.Children.Add(pathText);
+
+        error.TextAlignment = TextAlignment.Center;
+        error.MaxWidth = 280;
+        error.HorizontalAlignment = HorizontalAlignment.Center;
+        error.Margin = new Thickness(0, 6, 0, 0);
         stack.Children.Add(error);
 
-        var btn = new Button { Content = "Scatena", Width = 140, Height = 38, FontSize = 14,
-            FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 16, 0, 0),
-            Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(0, 122, 255)),
-            BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand };
-        btn.Click += (_, _) => Scatena();
-        stack.Children.Add(btn);
+        // ── Scatena
+        goBtn = Ui.Primary("Scatena", 19, new Thickness(0));
+        goBtn.Width = 150;
+        goBtn.Height = 38;
+        goBtn.Margin = new Thickness(0, 16, 0, 0);
+        goBtn.Click += (_, _) => Go();
+        stack.Children.Add(goBtn);
 
-        Content = stack;
-        Loaded += (_, _) => { ApplyBackdrop(); input.Focus(); };
-    }
-
-    static bool IsLightTheme() =>
-        Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-                          "AppsUseLightTheme", 1) is int v && v == 1;
-
-    void ApplyBackdrop()
-    {
-        var h = new WindowInteropHelper(this).Handle;
-        int useDark = dark ? 1 : 0;
-        DwmSetWindowAttribute(h, 20, ref useDark, sizeof(int));      // titolo scuro/chiaro
-
-        if (Environment.OSVersion.Version.Build >= 22621)            // Windows 11 22H2 o successivo
+        // ── Scheda di vetro sopra le macchie di colore
+        var card = new Border
         {
-            int acrylic = 3;                                         // 3 = Acrylic, 2 = Mica
-            DwmSetWindowAttribute(h, 38, ref acrylic, sizeof(int));
-            Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
-        }
-        else                                                         // Windows 10 / 11 vecchio: sfondo pieno
-        {
-            Background = new SolidColorBrush(dark ? Color.FromRgb(36, 36, 42) : Color.FromRgb(240, 240, 245));
-        }
-    }
-
-    static string Clean(string t) =>
-        string.Concat(t.Trim().Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '-' : c));
-
-    void UpdatePath()
-    {
-        placeholder.Visibility = input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        var name = Clean(input.Text);
-        pathText.Text = "La cartella verrà creata in:\n" + Path.Combine(desktop, name.Length == 0 ? "…" : name);
-    }
-
-    void Scatena()
-    {
-        var name = Clean(input.Text);
-        if (name.Length == 0) return;
-        try
-        {
-            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), name);
-            void W(string folder, string file, string text)
+            Margin = new Thickness(28, 44, 28, 28),
+            Padding = new Thickness(30),
+            CornerRadius = new CornerRadius(36),
+            Background = Theme.CardFill(),
+            BorderBrush = Theme.CardStroke(),
+            BorderThickness = new Thickness(1.2),
+            Child = stack,
+            Effect = new DropShadowEffect
             {
-                var dir = Path.Combine(root, folder); Directory.CreateDirectory(dir);
-                var p = Path.Combine(dir, file); if (!File.Exists(p)) File.WriteAllText(p, text);
+                BlurRadius = 28, ShadowDepth = 9, Direction = 270,
+                Opacity = Theme.Dark ? 0.35 : 0.15, Color = Colors.Black
             }
-            W("Html", "index.html", $"<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>{name}</title>\n  <link rel=\"stylesheet\" href=\"../Css/style.css\">\n</head>\n<body>\n  <h1>{name}</h1>\n  <script src=\"../Js/script.js\"></script>\n</body>\n</html>\n");
-            W("Css", "style.css", $"/* Stili di {name} */\n");
-            W("Php", "login.php", $"<?php\n// Login di {name}\n");
-            W("Js", "script.js", $"// Script di {name}\n");
-            Directory.CreateDirectory(Path.Combine(root, "Img"));
-            Application.Current.Shutdown();
+        };
+
+        var root = new Grid();
+        root.Children.Add(Blobs());
+        root.Children.Add(card);
+        Content = root;
+
+        input.TextChanged += (_, _) => { error.Text = ""; Refresh(); };
+        input.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Go(); };
+        store.Changed += Refresh;
+
+        Loaded += (_, _) => { Theme.ApplyBackdrop(this); input.Focus(); };
+        Refresh();
+    }
+
+    /// <summary>Macchie di colore sfocate che si muovono lentamente dietro al vetro.</summary>
+    static UIElement Blobs()
+    {
+        var inner = new Grid { IsHitTestVisible = false, Opacity = 0.55, Effect = new BlurEffect { Radius = 55 } };
+        inner.Children.Add(Blob(Color.FromRgb(64, 191, 204), 220, -50, -80, -110, -130));
+        inner.Children.Add(Blob(Color.FromRgb(224, 115, 184), 200, 60, 130, 110, 80));
+        inner.Children.Add(Blob(Color.FromRgb(140, 128, 235), 180, 120, -60, 70, -110));
+        return new Grid { ClipToBounds = true, IsHitTestVisible = false, Children = { inner } };
+    }
+
+    static UIElement Blob(Color color, double size, double x1, double y1, double x2, double y2)
+    {
+        var tr = new TranslateTransform(x1, y1);
+        var e = new System.Windows.Shapes.Ellipse
+        {
+            Width = size, Height = size, Fill = new SolidColorBrush(color),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = tr
+        };
+        DoubleAnimation Anim(double from, double to) => new(from, to, new Duration(TimeSpan.FromSeconds(7)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+        tr.BeginAnimation(TranslateTransform.XProperty, Anim(x1, x2));
+        tr.BeginAnimation(TranslateTransform.YProperty, Anim(y1, y2));
+        return e;
+    }
+
+    void ShowPresetMenu()
+    {
+        var items = store.Presets
+            .Select(p => (p.Name, p.Id == store.SelectedId, (Action)(() =>
+            {
+                store.SelectedId = p.Id;
+                store.Touch();
+            })))
+            .ToArray();
+        Ui.Menu(presetBtn, items);
+    }
+
+    void OpenEditor()
+    {
+        if (editor != null) { editor.Activate(); return; }
+        editor = new EditorWindow(store) { Owner = this };
+        editor.Closed += (_, _) => editor = null;
+        editor.Show();
+    }
+
+    /// <summary>Aggiorna etichetta del preset, pulsante e percorso in base a nome e preset scelti.</summary>
+    void Refresh()
+    {
+        var p = store.Selected;
+        var name = Builder.Safe(input.Text);
+
+        presetLabel.Text = p.Name;
+        placeholder.Visibility = input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        goBtn.IsEnabled = name.Length > 0;
+
+        var dest = Builder.ResolveDestination(p.Destination);
+        var text = "La cartella verrà creata in:\n" + System.IO.Path.Combine(dest, name.Length == 0 ? "…" : name);
+        if (!string.IsNullOrWhiteSpace(p.IdePath))
+            text += "\ne poi aperta in " + Ide.NameOf(p.IdePath);
+        pathText.Text = text;
+    }
+
+    void Go()
+    {
+        var name = Builder.Safe(input.Text);
+        if (name.Length == 0) return;
+        var p = store.Selected;
+
+        string root;
+        try { root = Builder.Create(name, p); }
+        catch (Exception ex) { error.Text = "Errore: " + ex.Message; return; }
+
+        if (!string.IsNullOrWhiteSpace(p.IdePath))
+        {
+            try { Ide.Open(p.IdePath, root); }
+            catch
+            {
+                error.Text = "Cartella creata, ma non riesco ad aprire l'IDE. Controlla la scelta nel preset.";
+                return;
+            }
         }
-        catch (Exception ex) { error.Text = "Errore: " + ex.Message; }
+        Application.Current.Shutdown();
     }
 }
